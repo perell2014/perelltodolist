@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List App</title>
+    <link rel="icon" type="image/x-icon" href="./images/task.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /*body {
+            background-color: #f0f0f0;
+       font-size: 14px;
+        }*/
+        body {
+            background-color: #f0f0f0;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .top-bar {
+            background-color: #4a90e2;
+            color: white;
+            padding: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .top-bar h1 {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+        .top-bar .btn {
+            color: white;
+            border-color: white;
+        }
+        .top-bar .btn:hover {
+            background-color: white;
+            color: #4a90e2;
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 20px 0;
+        }
+        .bottom-bar {
+            background-color: #333;
+            color: white;
+            padding: 10px 0;
+            font-size: 0.9rem;
+        }
+        /*h1 {
+            font-size: 1.8rem;
+            color: #333; 
+        }
+        h2 {
+            font-size: 1.4rem;
+            color: #333; 
+        }
+        h3 {
+            font-size: 1.2rem;
+            color: #333; 
+        }*/
+        .task-list {
+            /*min-height: 200px;*/
+            /*height: 350px;*//* Fixed height */
+            height: 45vh;
+            overflow-y: auto; /* Enable vertical scrolling */
+            border: 1px solid #ccc;
+            padding: 8px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .task {
+            cursor: move;
+            padding: 6px;
+            margin-bottom: 6px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        .task:hover {
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .task.selected {
+            background-color: #e0f7fa;
+            border-color: #4dd0e1;
+        }
+        .notes {
+            min-height: 100px;
+        }
+        .btn {
+            border-radius: 15px;
+            padding: 3px 10px;
+            margin: 1px;
+            font-size: 0.8rem;
+        }
+        .btn-start { background-color: #4caf50; color: white; }
+        .btn-stop { background-color: #f44336; color: white; }
+        .btn-reset { background-color: #ff9800; color: white; }
+        .btn-delete { background-color: #e91e63; color: white; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <h1>Todo List App</h1>
+                </div>
+                <div class="col-md-8 text-end">
+                    <button class="btn btn-outline-light me-2" onclick="printTasks()">Print to PDF</button>
+                    <button class="btn btn-outline-light me-2" onclick="exportToExcel()">Export Excel</button>
+                    <button class="btn btn-outline-light" onclick="removeCompletedTasks()">Remove All Completed Tasks</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-4">
+                    <h2>Now</h2>
+                    <div id="now-list" class="task-list">
+                        <!-- Tasks will be added here dynamically -->
+                    </div>
+                    <button class="btn btn-primary mt-2" onclick="addTask('now')">Add Task</button>
+                </div>
+                <div class="col-md-4">
+                    <h2>Future</h2>
+                    <div id="future-list" class="task-list">
+                        <!-- Tasks will be added here dynamically -->
+                    </div>
+                    <button class="btn btn-primary mt-2" onclick="addTask('future')">Add Task</button>
+                </div>
+                <div class="col-md-4">
+                    <h2>Completed</h2>
+                    <div id="completed-list" class="task-list">
+                        <!-- Tasks will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <h3>Notes</h3>
+                    <textarea id="task-notes" class="form-control notes" placeholder="Task notes..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-12 text-center">
+                    Created by Perell on July 2024 with support from Claude AI
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+      let tasks = JSON.parse(localStorage.getItem('tasks')) || { now: [], future: [], completed: [] };
+        let selectedTask = null;
+         let timers = {};
+        let worker = null;
+
+        // Try to create a Web Worker
+        try {
+            worker = new Worker('./timer-worker.js');
+            worker.onmessage = function(e) {
+                const { taskId, time } = e.data;
+                updateTaskTime(taskId, time);
+            };
+        } catch (error) {
+            console.warn('Web Worker not supported. Falling back to window timers.');
+            console.warn(error);
+        }
+        function saveToLocalStorage() {
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+function createTaskElement(task, listId) {
+    //console.log(`Creating task element for task:`, task);
+    const taskElement = document.createElement('div');
+    taskElement.classList.add('task');
+    taskElement.draggable = true;
+    taskElement.dataset.taskId = task.id;
+    taskElement.innerHTML = `
+        <span contenteditable="true" oninput="updateTaskName(this, '${listId}', '${task.id}')">${task.name}</span>
+        <span class="timer">${formatTime(task.time)}</span>
+        ${listId === 'now' ? `
+            <button class="btn btn-start" onclick="startTimer('${task.id}')">Start</button>
+            <button class="btn btn-stop" onclick="stopTimer('${task.id}')">Stop</button>
+            <button class="btn btn-reset" onclick="resetTimer('${task.id}')">Reset</button>
+        ` : ''}
+        ${listId !== 'completed' ? `
+            <button class="btn btn-delete" onclick="deleteTask('${listId}', '${task.id}')">Delete</button>
+        ` : ''}
+    `;
+    taskElement.addEventListener('click', () => selectTask(task.id, listId));
+    taskElement.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, sourceList: listId }));
+    });
+    return taskElement;
+}
+
+function renderTasks() {
+    ['now', 'future', 'completed'].forEach(listId => {
+        const listElement = document.getElementById(`${listId}-list`);
+        listElement.innerHTML = '';
+        tasks[listId].forEach(task => {
+            listElement.appendChild(createTaskElement(task, listId));
+        });
+    });
+}
+
+function addTask(listId) {
+    const taskName = prompt('Enter task name:');
+    if (taskName) {
+        const newTask = { id: Date.now().toString(), name: taskName, time: 0, notes: '' };
+        tasks[listId].push(newTask);
+        saveToLocalStorage();
+        renderTasks();
+    }
+}
+
+function updateTaskName(element, listId, taskId) {
+    const task = tasks[listId].find(t => t.id === taskId);
+    if (task) {
+        task.name = element.textContent.replace(/\n/g, '');
+        element.textContent = task.name;
+        saveToLocalStorage();
+    }
+}
+
+function selectTask(taskId, listId) {
+    document.querySelectorAll('.task').forEach(t => t.classList.remove('selected'));
+    selectedTask = tasks[listId].find(t => t.id === taskId);
+    const taskElement = document.querySelector(`.task[data-task-id="${taskId}"]`);
+    if (taskElement) {
+        taskElement.classList.add('selected');
+    }
+    document.getElementById('task-notes').value = selectedTask ? selectedTask.notes : '';
+}
+
+function startTimer(taskId) {
+            stopAllTimers();
+            const task = tasks.now.find(t => t.id === taskId);
+            if (task) {
+                if (worker) {
+                    worker.postMessage({ action: 'start', taskId, time: task.time });
+                } else {
+                    timers[taskId] = setInterval(() => {
+                        updateTaskTime(taskId, task.time + 1);
+                    }, 1000);
+                }
+            }
+        }
+
+        function stopTimer(taskId) {
+            if (worker) {
+                worker.postMessage({ action: 'stop', taskId });
+            } else {
+                clearInterval(timers[taskId]);
+                delete timers[taskId];
+            }
+        }
+
+        function resetTimer(taskId) {
+            if (worker) {
+                worker.postMessage({ action: 'reset', taskId });
+            } else {
+                stopTimer(taskId);
+                updateTaskTime(taskId, 0);
+            }
+        }
+
+        function stopAllTimers() {
+            if (worker) {
+                tasks.now.forEach(task => {
+                    worker.postMessage({ action: 'stop', taskId: task.id });
+                });
+            } else {
+                Object.keys(timers).forEach(taskId => {
+                    clearInterval(timers[taskId]);
+                    delete timers[taskId];
+                });
+            }
+        }
+
+
+function updateTaskTime(taskId, time) {
+            const task = tasks.now.find(t => t.id === taskId);
+            if (task) {
+                task.time = time;
+                updateTimerDisplay(taskId);
+                if (time != 0) {
+                    if (time % 1200 === 0) { // 20 minutes
+                        playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-1.mp3');
+                    }
+                    if (time % 3600 === 0) { // 1 hour
+                        playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
+                        playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
+                    }
+                }
+                saveToLocalStorage();
+            }
+        }
+
+function updateTimerDisplay(taskId) {
+    //console.log(`Updating timer display for task ${taskId}`);
+    const task = tasks.now.find(t => t.id === taskId);
+    if (task) {
+        const timerElement = document.querySelector(`#now-list .task[data-task-id="${taskId}"] .timer`);
+        if (timerElement) {
+            timerElement.textContent = formatTime(task.time);
+            //console.log(`Timer display updated: ${timerElement.textContent}`);
+        } else {
+            //console.log(`Timer element not found for task ${taskId}`);
+        }
+    } else {
+        //console.log(`Task ${taskId} not found when updating timer display`);
+    }
+}
+
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+
+function playSound(url) {
+    new Audio(url).play();
+}
+
+function printTasks() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 10;
+
+    ['Now', 'Future', 'Completed'].forEach((listName, index) => {
+        doc.setFontSize(16);
+        doc.text(listName, 10, y);
+        y += 10;
+        doc.setFontSize(12);
+        tasks[listName.toLowerCase()].forEach(task => {
+            doc.text(`${task.name} - ${formatTime(task.time)}`, 15, y);
+            y += 5;
+            doc.text(`Notes: ${task.notes}`, 20, y);
+            y += 10;
+        });
+        y += 10;
+    });
+
+    doc.save('tasks.pdf');
+}
+
+function exportToExcel() {
+    const wb = XLSX.utils.book_new();
+    ['Now', 'Future', 'Completed'].forEach(listName => {
+        const ws_data = tasks[listName.toLowerCase()].map(task => [task.name, formatTime(task.time), task.notes]);
+        const ws = XLSX.utils.aoa_to_sheet([['Task Name', 'Total Time', 'Notes'], ...ws_data]);
+        XLSX.utils.book_append_sheet(wb, ws, listName);
+    });
+    XLSX.writeFile(wb, 'tasks.xlsx');
+}
+
+function removeCompletedTasks() {
+    if (confirm('Are you sure you want to remove all completed tasks?')) {
+        tasks.completed = [];
+        saveToLocalStorage();
+        renderTasks();
+    }
+}
+
+function deleteTask(listId, taskId) {
+    const taskIndex = tasks[listId].findIndex(t => t.id === taskId);
+    if (taskIndex !== -1) {
+        tasks[listId].splice(taskIndex, 1);
+        if (selectedTask && selectedTask.id === taskId) {
+            selectedTask = null;
+            document.getElementById('task-notes').value = '';
+        }
+        saveToLocalStorage();
+        renderTasks();
+    }
+}
+
+document.getElementById('task-notes').addEventListener('input', (e) => {
+    if (selectedTask) {
+        selectedTask.notes = e.target.value;
+        saveToLocalStorage();
+    }
+});
+
+['now', 'future', 'completed'].forEach(listId => {
+    const listElement = document.getElementById(`${listId}-list`);
+    listElement.addEventListener('dragover', (e) => e.preventDefault());
+    listElement.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const { taskId, sourceList } = JSON.parse(e.dataTransfer.getData('text/plain'));
+        const targetList = e.target.closest('.task-list').id.split('-')[0];
+        
+        if (sourceList === targetList) {
+            // Reordering within the same list
+            const taskElements = Array.from(listElement.querySelectorAll('.task'));
+            const sourceIndex = tasks[sourceList].findIndex(t => t.id === taskId);
+            const targetIndex = taskElements.indexOf(e.target.closest('.task'));
+            
+            if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
+                const [task] = tasks[sourceList].splice(sourceIndex, 1);
+                tasks[sourceList].splice(targetIndex, 0, task);
+            }
+        } else {
+            // Moving between lists
+            const taskIndex = tasks[sourceList].findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+                const [task] = tasks[sourceList].splice(taskIndex, 1);
+                tasks[targetList].push(task);
+            }
+        }
+        
+        saveToLocalStorage();
+        renderTasks();
+    });
+});
+
+
+function adjustTaskListHeight() {
+            const windowHeight = window.innerHeight;
+            const topBarHeight = document.querySelector('.top-bar').offsetHeight;
+            const bottomBarHeight = document.querySelector('.bottom-bar').offsetHeight;
+            const availableHeight = windowHeight - topBarHeight - bottomBarHeight - 100; // 100px for padding and margins
+            const taskListHeight = availableHeight * 0.6; // 60% of available height
+            const taskLists = document.querySelectorAll('.task-list');
+            taskLists.forEach(list => {
+                list.style.height = `${taskListHeight}px`;
+            });
+        }
+
+        // Call the function on page load and window resize
+        window.addEventListener('load', adjustTaskListHeight);
+        window.addEventListener('resize', adjustTaskListHeight);
+
+
+renderTasks();
+    </script>
+</body>
+</html>
