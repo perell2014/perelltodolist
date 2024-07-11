@@ -8,8 +8,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="./scripts/HackTimer.js"></script>
     <style>
-        /*body {
+         /*body {
             background-color: #f0f0f0;
        font-size: 14px;
         }*/
@@ -105,7 +106,8 @@
     </style>
 </head>
 <body>
-    <div class="top-bar">
+
+ <div class="top-bar">
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-md-4">
@@ -157,68 +159,19 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-md-12 text-center">
-                    Created by Perell on July 2024 with support from Claude AI - Version:001
+                    Created by Perell on July 2024 with support from Claude AI - Version:002
                 </div>
             </div>
         </div>
     </div>
-
     <script>
-      let tasks = JSON.parse(localStorage.getItem('tasks')) || { now: [], future: [], completed: [] };
-        let selectedTask = null;
-         let timers = {};
-        // Timer Worker Code
-        const workerCode = `
-            let timers = {};
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || { now: [], future: [], completed: [] };
+let selectedTask = null;
+let timers = {};
 
-            self.onmessage = function(e) {
-              const { action, taskId, time } = e.data;
-
-              switch (action) {
-                case 'start':
-                  timers[taskId] = setInterval(() => {
-                    self.postMessage({ taskId, time: time + 1 });
-                  }, 1000);
-                  break;
-                case 'stop':
-                  clearInterval(timers[taskId]);
-                  delete timers[taskId];
-                  break;
-                case 'reset':
-                  clearInterval(timers[taskId]);
-                  delete timers[taskId];
-                  self.postMessage({ taskId, time: 0 });
-                  break;
-              }
-            };
-        `;
-
-        // Create a Blob containing the worker code
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const workerUrl = URL.createObjectURL(blob);
-
-        // Create the Web Worker
-        let worker = new Worker(workerUrl);
-
-        worker.onmessage = function(e) {
-            const { taskId, time } = e.data;
-            const task = tasks.now.find(t => t.id === taskId);
-            if (task) {
-                task.time = time;
-                updateTimerDisplay(taskId);
-                if (time % 1200 === 0) { // 20 minutes
-                    playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-1.mp3');
-                }
-                if (time % 3600 === 0) { // 1 hour
-                    playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
-                    playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
-                }
-                saveToLocalStorage();
-            }
-        };
-        function saveToLocalStorage() {
-            localStorage.setItem('tasks', JSON.stringify(tasks));
-        }
+function saveToLocalStorage() {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+}
 
 function createTaskElement(task, listId) {
     //console.log(`Creating task element for task:`, task);
@@ -285,68 +238,60 @@ function selectTask(taskId, listId) {
 }
 
 function startTimer(taskId) {
-            stopAllTimers();
-            const task = tasks.now.find(t => t.id === taskId);
-            if (task) {
-                if (worker) {
-                    worker.postMessage({ action: 'start', taskId, time: task.time });
-                } else {
-                    timers[taskId] = setInterval(() => {
-                        updateTaskTime(taskId, task.time + 1);
-                    }, 1000);
-                }
+    //console.log(`Attempting to start timer for task ${taskId}`);
+    stopAllTimers();
+    //console.log('Current tasks in "now" list:', tasks.now);
+    const task = tasks.now.find(t => t.id === taskId);
+    if (task) {
+        //console.log(`Found task:`, task);
+        timers[taskId] = setInterval(() => {
+            //console.log(`Timer tick for task ${taskId}`);
+            task.time++;
+            updateTimerDisplay(taskId);
+            if (task.time % 1200 === 0) { // 20 minutes
+                playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-1.mp3');
             }
-        }
-
-        function stopTimer(taskId) {
-            if (worker) {
-                worker.postMessage({ action: 'stop', taskId });
-            } else {
-                clearInterval(timers[taskId]);
-                delete timers[taskId];
+            if (task.time % 3600 === 0) { // 1 hour
+                playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
+                playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
             }
-        }
-
-        function resetTimer(taskId) {
-            if (worker) {
-                worker.postMessage({ action: 'reset', taskId });
-            } else {
-                stopTimer(taskId);
-                updateTaskTime(taskId, 0);
-            }
-        }
-
-        function stopAllTimers() {
-            if (worker) {
-                tasks.now.forEach(task => {
-                    worker.postMessage({ action: 'stop', taskId: task.id });
-                });
-            } else {
-                Object.keys(timers).forEach(taskId => {
-                    clearInterval(timers[taskId]);
-                    delete timers[taskId];
-                });
-            }
-        }
+            saveToLocalStorage();
+        }, 1000);
+        //console.log(`Timer started for task ${taskId}`);
+    } else {
+        //console.error(`Task ${taskId} not found in the 'now' list`);
+    }
+}
 
 
-function updateTaskTime(taskId, time) {
-            const task = tasks.now.find(t => t.id === taskId);
-            if (task) {
-                task.time = time;
-                updateTimerDisplay(taskId);
-                if (time != 0) {
-                    if (time % 1200 === 0) { // 20 minutes
-                        playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-1.mp3');
-                    }
-                    if (time % 3600 === 0) { // 1 hour
-                        playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
-                        playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
-                    }
-                }
-                saveToLocalStorage();
-            }
-        }
+// Add this new wrapper function
+function startTimerWrapper(taskId) {
+    //console.log(`startTimerWrapper called with taskId: ${taskId}`);
+    event.stopPropagation();
+    startTimer(taskId);
+}
+
+function stopTimer(taskId) {
+    clearInterval(timers[taskId]);
+    delete timers[taskId];
+}
+
+function resetTimer(taskId) {
+    stopTimer(taskId);
+    const task = tasks.now.find(t => t.id === taskId);
+    if (task) {
+        task.time = 0;
+        updateTimerDisplay(taskId);
+        saveToLocalStorage();
+    }
+}
+
+function stopAllTimers() {
+    Object.keys(timers).forEach(taskId => {
+        clearInterval(timers[taskId]);
+        delete timers[taskId];
+    });
+}
 
 function updateTimerDisplay(taskId) {
     //console.log(`Updating timer display for task ${taskId}`);
@@ -361,6 +306,16 @@ function updateTimerDisplay(taskId) {
         }
     } else {
         //console.log(`Task ${taskId} not found when updating timer display`);
+    }
+}
+
+function updateTimerDisplayOLD(taskId) {
+    const task = tasks.now.find(t => t.id === taskId);
+    if (task) {
+        const timerElement = document.querySelector(`#now-list .task[data-task-id="${taskId}"] .timer`);
+        if (timerElement) {
+            timerElement.textContent = formatTime(task.time);
+        }
     }
 }
 
@@ -467,24 +422,6 @@ document.getElementById('task-notes').addEventListener('input', (e) => {
         renderTasks();
     });
 });
-
-
-function adjustTaskListHeight() {
-            const windowHeight = window.innerHeight;
-            const topBarHeight = document.querySelector('.top-bar').offsetHeight;
-            const bottomBarHeight = document.querySelector('.bottom-bar').offsetHeight;
-            const availableHeight = windowHeight - topBarHeight - bottomBarHeight - 100; // 100px for padding and margins
-            const taskListHeight = availableHeight * 0.6; // 60% of available height
-            const taskLists = document.querySelectorAll('.task-list');
-            taskLists.forEach(list => {
-                list.style.height = `${taskListHeight}px`;
-            });
-        }
-
-        // Call the function on page load and window resize
-        window.addEventListener('load', adjustTaskListHeight);
-        window.addEventListener('resize', adjustTaskListHeight);
-
 
 renderTasks();
     </script>
