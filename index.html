@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Todo List App</title>
     <link rel="icon" type="image/x-icon" href="./images/task.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -159,7 +160,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-md-12 text-center">
-                    Created by Perell on July 2024 with support from Claude AI / HackTimer by turuslan - Version:003
+                    Created by Perell on July 2024 with support from Claude AI / HackTimer by turuslan - Version:005
                 </div>
             </div>
         </div>
@@ -173,6 +174,42 @@ function saveToLocalStorage() {
     localStorage.setItem('tasks', JSON.stringify(tasks));
 }
 
+
+function addTask(listId) {
+const taskName = prompt('Enter task name:');
+    if (taskName) {
+        const newTask = { id: Date.now().toString(), name: taskName, time: 0, notes: '' };
+        tasks[listId].push(newTask);
+        saveToLocalStorage();
+        renderTasks();
+    }
+}
+
+function toggleStartPause(button, taskId) {
+            const icon = button.querySelector('i');
+            //const buttonClass = button.querySelector('btn-primary');
+            const isPlaying = icon.classList.contains('fa-pause');
+
+            if (isPlaying) {
+                icon.classList.replace('fa-pause', 'fa-play');
+                 button.classList.replace('btn-danger', 'btn-primary'); // Remove blue color
+                stopTimer(taskId);
+            } else {
+                // Stop all other tasks
+                document.querySelectorAll('.start-pause-btn i.fa-pause').forEach(pauseIcon => {
+                    pauseIcon.classList.replace('fa-pause', 'fa-play');
+                });
+                document.querySelectorAll('.start-pause-btn').forEach(pauseButton => {
+                    pauseButton.classList.replace('btn-danger', 'btn-primary'); // Remove blue color
+                });
+                
+                icon.classList.replace('fa-play', 'fa-pause');
+                startTimer(taskId);
+                button.classList.replace('btn-primary', 'btn-danger'); // Remove blue color
+                // Add red color
+            }
+}
+
 function createTaskElement(task, listId) {
     //console.log(`Creating task element for task:`, task);
     const taskElement = document.createElement('div');
@@ -183,8 +220,9 @@ function createTaskElement(task, listId) {
         <span contenteditable="true" oninput="updateTaskName(this, '${listId}', '${task.id}')">${task.name}</span>
         <span class="timer">${formatTime(task.time)}</span>
         ${listId === 'now' ? `
-            <button class="btn btn-start" onclick="startTimer('${task.id}')">Start</button>
-            <button class="btn btn-stop" onclick="stopTimer('${task.id}')">Stop</button>
+            <button class="btn btn-sm btn-primary start-pause-btn" onclick="toggleStartPause(this,'${task.id}')">
+                    <i class="fas fa-play"></i>
+            </button>
             <button class="btn btn-reset" onclick="resetTimer('${task.id}')">Reset</button>
         ` : ''}
         ${listId !== 'completed' ? `
@@ -208,7 +246,7 @@ function renderTasks() {
     });
 }
 
-function addTask(listId) {
+function addTaskOLD(listId) {
     const taskName = prompt('Enter task name:');
     if (taskName) {
         const newTask = { id: Date.now().toString(), name: taskName, time: 0, notes: '' };
@@ -294,22 +332,6 @@ function stopAllTimers() {
 }
 
 function updateTimerDisplay(taskId) {
-    //console.log(`Updating timer display for task ${taskId}`);
-    const task = tasks.now.find(t => t.id === taskId);
-    if (task) {
-        const timerElement = document.querySelector(`#now-list .task[data-task-id="${taskId}"] .timer`);
-        if (timerElement) {
-            timerElement.textContent = formatTime(task.time);
-            //console.log(`Timer display updated: ${timerElement.textContent}`);
-        } else {
-            //console.log(`Timer element not found for task ${taskId}`);
-        }
-    } else {
-        //console.log(`Task ${taskId} not found when updating timer display`);
-    }
-}
-
-function updateTimerDisplayOLD(taskId) {
     const task = tasks.now.find(t => t.id === taskId);
     if (task) {
         const timerElement = document.querySelector(`#now-list .task[data-task-id="${taskId}"] .timer`);
@@ -411,9 +433,17 @@ document.getElementById('task-notes').addEventListener('input', (e) => {
             }
         } else {
             // Moving between lists
+
             const taskIndex = tasks[sourceList].findIndex(t => t.id === taskId);
             if (taskIndex !== -1) {
                 const [task] = tasks[sourceList].splice(taskIndex, 1);
+                 // If the target list is 'completed', add the current date and time
+                if (targetList === 'completed') {
+                    const now = new Date();
+                    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+                    task.name += ` --Date: ${formattedDate}`;
+                }
+                
                 tasks[targetList].push(task);
             }
         }
@@ -421,6 +451,7 @@ document.getElementById('task-notes').addEventListener('input', (e) => {
         saveToLocalStorage();
         renderTasks();
     });
+
 });
 
 renderTasks();
