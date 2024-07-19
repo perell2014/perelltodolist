@@ -160,7 +160,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-md-12 text-center">
-                    Created by Perell on July 2024 with support from Claude AI / HackTimer by turuslan - Version:005
+                    Created by Perell on July 2024 with support from Claude AI / HackTimer by turuslan - Version:006
                 </div>
             </div>
         </div>
@@ -348,6 +348,12 @@ function formatTime(seconds) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+function formatDateTime() {
+    const now = new Date();
+    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    return formattedDate;
+}
+
 
 function playSound(url) {
     new Audio(url).play();
@@ -371,8 +377,7 @@ function printTasks() {
         });
         y += 10;
     });
-
-    doc.save('tasks.pdf');
+    doc.save(`tasks_${formatDateTime()}.pdf`);
 }
 
 function exportToExcel() {
@@ -382,7 +387,7 @@ function exportToExcel() {
         const ws = XLSX.utils.aoa_to_sheet([['Task Name', 'Total Time', 'Notes'], ...ws_data]);
         XLSX.utils.book_append_sheet(wb, ws, listName);
     });
-    XLSX.writeFile(wb, 'tasks.xlsx');
+    XLSX.writeFile(wb, `tasks_${formatDateTime()}.xlsx`);
 }
 
 function removeCompletedTasks() {
@@ -439,9 +444,7 @@ document.getElementById('task-notes').addEventListener('input', (e) => {
                 const [task] = tasks[sourceList].splice(taskIndex, 1);
                  // If the target list is 'completed', add the current date and time
                 if (targetList === 'completed') {
-                    const now = new Date();
-                    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-                    task.name += ` --Date: ${formattedDate}`;
+                    task.name += ` --Date: ${formatDateTime()}`;
                 }
                 
                 tasks[targetList].push(task);
