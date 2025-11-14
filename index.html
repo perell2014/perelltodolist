@@ -92,54 +92,10 @@ let CONFIG = {
 
 // Load configuration
 async function loadConfig() {
-    try {
-        // First try to load from Cloudflare Function (production)
-        try {
+   
              console.log('TRYING to load');
             fetch("/").then(r => r.text()).then(console.log);
-            const response = await fetch('/api/config');
-            if (response.ok) {
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const remoteConfig = await response.json();
-                    Object.assign(CONFIG, remoteConfig);
-                    console.log('Loaded config from Cloudflare Function');
-                    return;
-                } else {
-                    // If we get HTML back, it's likely a 404/500 page
-                    const text = await response.text();
-                    console.log('Received non-JSON response from server:', text.substring(0, 100) + '...');
-                    throw new Error('Invalid response format');
-                }
-            } else {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-        } catch (remoteErr) {
-            console.log('Remote config not available, trying local config...', remoteErr.message);
-        }
-
-        // Rest of your existing fallback code remains the same...
-        try {
-            const localConfig = await import('./local.config.js');
-            Object.assign(CONFIG, localConfig.default);
-            console.log('Loaded config from local.config.js');
-        } catch (localErr) {
-            console.log('Local config not found, using defaults...');
-            if (typeof process !== 'undefined' && process.env) {
-                CONFIG.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || CONFIG.GOOGLE_CLIENT_ID;
-                CONFIG.JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || CONFIG.JSONBIN_BIN_ID;
-                CONFIG.JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY || CONFIG.JSONBIN_MASTER_KEY;
-                console.log('Fell back to environment variables');
-            }
-        }
-    } catch (error) {
-        console.error('Error in loadConfig:', error);
-    } finally {
-        console.log('Configuration loaded:', {
-            ...CONFIG,
-            JSONBIN_MASTER_KEY: CONFIG.JSONBIN_MASTER_KEY ? '***' : 'Not set'
-        });
-    }
+           
 }
 
 // -----------------------------
@@ -632,6 +588,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
