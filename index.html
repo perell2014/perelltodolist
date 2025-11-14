@@ -95,6 +95,7 @@ async function loadConfig() {
     try {
         // First try to load from Cloudflare Function (production)
         try {
+            fetch("/").then(r => r.text()).then(console.log);
             const response = await fetch('/api/config');
             if (response.ok) {
                 const contentType = response.headers.get('content-type');
@@ -630,4 +631,5 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
