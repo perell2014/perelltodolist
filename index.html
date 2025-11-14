@@ -1,463 +1,616 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Todo List App</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Todo List App — Google SSO + jsonbin</title>
     <link rel="icon" type="image/x-icon" href="./images/task.ico">
     <link href="./scripts/font-awesome/css/all.min.css" rel="stylesheet">
     <link href="./scripts/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-    <script src="./scripts/ajax/jspdf/jspdf.umd.min.js"></script>
-    <script src="./scripts/ajax/xlsx/xlsx.full.min.js"></script>
-    <script src="./scripts/HackTimer.js"></script>
+
+    <!-- Google Identity Services (loaded async) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- SheetJS and jsPDF for export features -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
     <style>
-         /*body {
-            background-color: #f0f0f0;
-       font-size: 14px;
-        }*/
-        body {
-            background-color: #f0f0f0;
-            font-size: 14px;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            margin: 0;
-        }
-        .top-bar {
-            background-color: #4a90e2;
-            color: white;
-            padding: 10px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .top-bar h1 {
-            font-size: 1.8rem;
-            margin: 0;
-        }
-        .top-bar .btn {
-            color: white;
-            border-color: white;
-        }
-        .top-bar .btn:hover {
-            background-color: white;
-            color: #4a90e2;
-        }
-        .main-content {
-            flex-grow: 1;
-            padding: 20px 0;
-        }
-        .bottom-bar {
-            background-color: #333;
-            color: white;
-            padding: 10px 0;
-            font-size: 0.9rem;
-        }
-        /*h1 {
-            font-size: 1.8rem;
-            color: #333; 
-        }
-        h2 {
-            font-size: 1.4rem;
-            color: #333; 
-        }
-        h3 {
-            font-size: 1.2rem;
-            color: #333; 
-        }*/
-        .task-list {
-            /*min-height: 200px;*/
-            /*height: 350px;*//* Fixed height */
-            height: 45vh;
-            overflow-y: auto; /* Enable vertical scrolling */
-            border: 1px solid #ccc;
-            padding: 8px;
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .task {
-            cursor: move;
-            padding: 6px;
-            margin-bottom: 6px;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            transition: all 0.3s ease;
-            font-size: 0.9rem;
-        }
-        .task:hover {
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        .task.selected {
-            background-color: #e0f7fa;
-            border-color: #4dd0e1;
-        }
-        .notes {
-            min-height: 100px;
-        }
-        .btn {
-            border-radius: 15px;
-            padding: 3px 10px;
-            margin: 1px;
-            font-size: 0.8rem;
-        }
-        .btn-start { background-color: #4caf50; color: white; }
-        .btn-stop { background-color: #f44336; color: white; }
-        .btn-reset { background-color: #ff9800; color: white; }
-        .btn-delete { background-color: #e91e63; color: white; }
+        body { background-color:#f0f0f0; font-size:14px; display:flex; flex-direction:column; min-height:100vh; margin:0 }
+        .top-bar { background:#4a90e2; color:#fff; padding:10px 0; box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+        .top-bar h1 { font-size:1.8rem; margin:0 }
+        .nav-tabs { background:#e9ecef; border-bottom:2px solid #4a90e2 }
+        .nav-tabs .nav-link { color: #495057; }
+        .nav-tabs .nav-link.active { color:#fff; border: none; }
+        .nav-tabs .nav-link[data-tab="pro"].active { background-color: #4a90e2; }
+        .nav-tabs .nav-link[data-tab="pers"].active { background-color: #28a745; }
+        .nav-tabs .nav-link[data-tab="tmp"].active { background-color: #6c757d; }
+        .main-content { flex-grow:1; padding:20px 0 }
+        .bottom-bar { background:#333; color:#fff; padding:10px 0; font-size:.9rem; text-align:center }
+        .task-list { height:45vh; overflow-y:auto; border:1px solid #ccc; padding:8px; background:#fff; border-radius:8px }
+        .task { cursor:move; padding:6px; margin-bottom:6px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px }
+        .task.selected { background:#e0f7fa; border-color:#4dd0e1 }
+        .notes { min-height:100px }
+        .btn { border-radius:15px; padding:3px 10px; margin:1px; font-size:.8rem }
+        .btn-reset { background-color: #ff9800; color: white; border: 1px solid #e68a00; }
+        .btn-reset:hover { background-color: #e68a00; color: white; }
+        .btn-delete { background-color: #dc3545; color: white; border: 1px solid #c82333; }
+        .btn-delete:hover { background-color: #c82333; color: white; }
+        .hidden { display:none }
     </style>
 </head>
 <body>
 
- <div class="top-bar">
-        <div class="container-fluid">
-            <div class="row align-items-center">
-                <div class="col-md-4">
-                    <h1>Todo List App</h1>
+<div class="top-bar">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <div class="col-md-4"><h1>Todo List App</h1></div>
+            <div class="col-md-8 text-end" id="auth-area">
+                <!-- We DO NOT use the automatic g_id_onload auto-init to avoid callback timing issues -->
+                <div id="gsi-button-placeholder"></div>
+                <div id="user-info" class="d-inline-block ms-3 hidden">
+                    <span id="user-name"></span>
+                    <button class="btn btn-outline-light ms-2" id="signOutBtn">Sign out</button>
                 </div>
-                <div class="col-md-8 text-end">
-                    <button class="btn btn-outline-light me-2" onclick="printTasks()">Print to PDF</button>
-                    <button class="btn btn-outline-light me-2" onclick="exportToExcel()">Export Excel</button>
-                    <button class="btn btn-outline-light" onclick="removeCompletedTasks()">Remove All Completed Tasks</button>
-                </div>
+
+                <button class="btn btn-outline-light me-2" id="printBtn">Print to PDF</button>
+                <button class="btn btn-outline-light me-2" id="exportBtn">Export Excel</button>
+                <button class="btn btn-outline-light" id="removeCompletedBtn">Remove All Completed Tasks</button>
             </div>
         </div>
     </div>
+</div>
 
-    <div class="main-content">
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-md-4">
-                    <h2>Now</h2>
-                    <div id="now-list" class="task-list">
-                        <!-- Tasks will be added here dynamically -->
-                    </div>
-                    <button class="btn btn-primary mt-2" onclick="addTask('now')">Add Task</button>
-                </div>
-                <div class="col-md-4">
-                    <h2>Future</h2>
-                    <div id="future-list" class="task-list">
-                        <!-- Tasks will be added here dynamically -->
-                    </div>
-                    <button class="btn btn-primary mt-2" onclick="addTask('future')">Add Task</button>
-                </div>
-                <div class="col-md-4">
-                    <h2>Completed</h2>
-                    <div id="completed-list" class="task-list">
-                        <!-- Tasks will be added here dynamically -->
-                    </div>
-                </div>
-            </div>
-            <div class="row mt-4">
-                <div class="col-md-12">
-                    <h3>Notes</h3>
-                    <textarea id="task-notes" class="form-control notes" placeholder="Task notes..."></textarea>
-                </div>
-            </div>
-        </div>
-    </div>
+<ul class="nav nav-tabs justify-content-center" id="taskTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" data-tab="pro">Pro</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="pers">Pers</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" data-tab="tmp">Tmp</a></li>
+</ul>
 
-    <div class="bottom-bar">
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-md-12 text-center">
-                    Created by Perell on July 2024 with support from Claude AI / HackTimer by turuslan - Version:007
-                </div>
-            </div>
-        </div>
-    </div>
-    <script>
-        let tasks = JSON.parse(localStorage.getItem('tasks')) || { now: [], future: [], completed: [] };
-let selectedTask = null;
-let timers = {};
+<div class="main-content">
+    <div class="container-fluid" id="tab-container"></div>
+</div>
 
-function saveToLocalStorage() {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
+<div class="bottom-bar">Created by Perell with support from OpenAI / Claude AI / HackTimer by Turuslan - Nov. 2025 - Version:009</div>
+
+<script>
+/*
+  Clean, fixed version of the app with export features.
+  - Safe GSI init
+  - Per-user jsonbin persistence
+  - Export to Excel (SheetJS) and Print-to-PDF (jsPDF)
+*/
+
+// -----------------------------
+// CONFIG - Will be initialized after loading local config
+// -----------------------------
+let CONFIG = {
+    GOOGLE_CLIENT_ID: '',
+    JSONBIN_BIN_ID: '',
+    JSONBIN_MASTER_KEY: '',
+    JSONBIN_BASE: 'https://api.jsonbin.io/v3/b'
+};
+
+// Load configuration
+async function loadConfig() {
+    try {
+        // In production, these will be set by Cloudflare Pages
+        if (typeof GOOGLE_CLIENT_ID !== 'undefined') {
+            CONFIG.GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID;
+            CONFIG.JSONBIN_BIN_ID = JSONBIN_BIN_ID;
+            CONFIG.JSONBIN_MASTER_KEY = JSONBIN_MASTER_KEY;
+        } else {
+            // In local development, load from local config file
+            const localConfig = await import('./local.config.js');
+            Object.assign(CONFIG, localConfig.default);
+        }
+        console.log('Configuration loaded');
+    } catch (error) {
+        console.error('Error loading configuration:', error);
+        // Fallback to environment variables if available
+        if (process && process.env) {
+            CONFIG.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+            CONFIG.JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || '';
+            CONFIG.JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY || '';
+        }
+    }
+    
+    // Initialize the app after config is loaded
+    initializeApp();
 }
 
+// Initialize the application after config is loaded
+function initializeApp() {
+    // Your existing initialization code here
+    console.log('App initialized with config:', CONFIG);
+}
 
-function addTask(listId) {
-const taskName = prompt('Enter task name:');
-    if (taskName) {
-        const newTask = { id: Date.now().toString(), name: taskName, time: 0, notes: '' };
-        tasks[listId].push(newTask);
-        saveToLocalStorage();
-        renderTasks();
+// -----------------------------
+// App state
+// -----------------------------
+let currentTab = 'pro';
+let tasks = { pro: { now: [], future: [], completed: [] }, pers: { now: [], future: [], completed: [] }, tmp: { now: [], future: [], completed: [] } };
+let selectedTask = null;
+let timers = {};
+let currentUser = null; // { id, email, name }
+let jsonbinRecordCache = null;
+
+// Start the application by loading configuration
+loadConfig().catch(console.error);
+
+// -----------------------------
+// Helpers
+// -----------------------------
+function formatTime(s) {
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function formatDateTime() { const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${String(n.getFullYear()).slice(-2)} ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:${String(n.getSeconds()).padStart(2,'0')}`; }
+
+// Normalize incoming tasks object to guarantee structure
+function normalizeTasks(obj) {
+    const base = { now: [], future: [], completed: [] };
+    obj = obj || {};
+    return {
+        pro: Object.assign({}, base, obj.pro || {}),
+        pers: Object.assign({}, base, obj.pers || {}),
+        tmp: Object.assign({}, base, obj.tmp || {})
+    };
+}
+
+// -----------------------------
+// jsonbin.io helpers
+// -----------------------------
+async function fetchJsonBinRecord() {
+    try {
+        if (!CONFIG.JSONBIN_BIN_ID || !CONFIG.JSONBIN_MASTER_KEY) {
+            console.error('JSONBin configuration missing');
+            return null;
+        }
+        const res = await fetch(`${CONFIG.JSONBIN_BASE}/${CONFIG.JSONBIN_BIN_ID}`, {
+            method: 'GET', headers: { 'X-Master-Key': CONFIG.JSONBIN_MASTER_KEY }
+        });
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        const data = await res.json();
+        const record = data.record || {};
+        jsonbinRecordCache = record;
+        return record;
+    } catch (err) {
+        console.error('fetchJsonBinRecord error', err);
+        return {};
     }
 }
 
-function toggleStartPause(button, taskId) {
-            const icon = button.querySelector('i');
-            //const buttonClass = button.querySelector('btn-primary');
-            const isPlaying = icon.classList.contains('fa-pause');
+async function saveJsonBinRecord(record) {
+    try {
+        const res = await fetch(`${JSONBIN_BASE}/${JSONBIN_BIN_ID}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Master-Key': CONFIG.JSONBIN_MASTER_KEY },
+            body: JSON.stringify(record)
+        });
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        const data = await res.json();
+        jsonbinRecordCache = record;
+        return data;
+    } catch (err) {
+        console.error('saveJsonBinRecord error', err);
+        return null;
+    }
+}
 
-            if (isPlaying) {
-                icon.classList.replace('fa-pause', 'fa-play');
-                 button.classList.replace('btn-danger', 'btn-primary'); // Remove blue color
-                stopTimer(taskId);
+async function saveTasksToJsonBin() {
+    if (!currentUser) return;
+    let record = jsonbinRecordCache || await fetchJsonBinRecord();
+    record = record || {};
+    record[currentUser.id] = tasks;
+    return await saveJsonBinRecord(record);
+}
+
+// -----------------------------
+// Local persistence (per-user)
+// -----------------------------
+function saveToLocalStorage() {
+    if (currentUser) {
+        localStorage.setItem('tasks_' + currentUser.id, JSON.stringify(tasks));
+        // Fire-and-forget remote save
+        saveTasksToJsonBin().catch(e => console.error('remote save failed', e));
+    } else {
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+    }
+}
+
+async function loadTasksForCurrentUser() {
+    if (!currentUser) return;
+    
+    // show UI
+    document.getElementById('tab-container').classList.remove('hidden');
+    document.getElementById('taskTabs').classList.remove('hidden');
+
+    // load local first
+    const local = localStorage.getItem('tasks_' + currentUser.id);
+    if (local) {
+        try { 
+            const parsed = JSON.parse(local);
+            // Only update the current tab's data to preserve other tabs' state
+            if (parsed && parsed[currentTab]) {
+                tasks[currentTab] = parsed[currentTab];
             } else {
-                // Stop all other tasks
-                document.querySelectorAll('.start-pause-btn i.fa-pause').forEach(pauseIcon => {
-                    pauseIcon.classList.replace('fa-pause', 'fa-play');
-                });
-                document.querySelectorAll('.start-pause-btn').forEach(pauseButton => {
-                    pauseButton.classList.replace('btn-danger', 'btn-primary'); // Remove blue color
-                });
-                
-                icon.classList.replace('fa-play', 'fa-pause');
-                startTimer(taskId);
-                button.classList.replace('btn-primary', 'btn-danger'); // Remove blue color
-                // Add red color
+                tasks = normalizeTasks(parsed);
             }
+        } catch(e) { 
+            console.warn('local parse error', e); 
+        }
+    }
+
+    try {
+        // fetch remote authoritative copy
+        const record = await fetchJsonBinRecord();
+        if (record && record[currentUser.id]) {
+            // Only update the current tab's data to preserve other tabs' state
+            if (record[currentUser.id][currentTab]) {
+                tasks[currentTab] = record[currentUser.id][currentTab];
+            } else {
+                tasks = normalizeTasks(record[currentUser.id]);
+            }
+            localStorage.setItem('tasks_' + currentUser.id, JSON.stringify(tasks));
+        } else {
+            // ensure normalized and save initial
+            tasks = normalizeTasks(tasks);
+            await saveTasksToJsonBin();
+        }
+    } catch (e) {
+        console.error('Error loading remote tasks:', e);
+    }
+    
+    renderTabContent();
+}
+
+// -----------------------------
+// Google Sign-In handlers
+// -----------------------------
+function parseJwt (token) {
+  const base64Url = token.split('.')[1];
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c){ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }).join(''));
+  return JSON.parse(jsonPayload);
+}
+
+// Global callback referenced by GSI init
+window.handleCredentialResponse = async function(response) {
+    if (!CONFIG.GOOGLE_CLIENT_ID) {
+        console.error('Google Client ID not configured');
+        return;
+    }
+    try {
+        const payload = parseJwt(response.credential);
+        currentUser = { id: payload.sub, email: payload.email, name: payload.name };
+        document.getElementById('user-name').textContent = `${currentUser.name} (${currentUser.email})`;
+        document.getElementById('user-info').classList.remove('hidden');
+        document.getElementById('gsi-button-placeholder').classList.add('hidden');
+        await loadTasksForCurrentUser();
+        renderTabContent();
+    } catch (err) {
+        console.error('handleCredentialResponse error', err);
+    }
+};
+
+function renderGoogleButtonWhenReady() {
+    const maxWaitMs = 5000; // give the GSI script a little time
+    const interval = 100;
+    let waited = 0;
+    return new Promise((resolve, reject) => {
+        const t = setInterval(() => {
+            if (window.google && google.accounts && google.accounts.id) {
+                clearInterval(t);
+                try {
+                    // initialize GSI with a real function reference (not string)
+                    google.accounts.id.initialize({ client_id: CONFIG.GOOGLE_CLIENT_ID, callback: window.handleCredentialResponse });
+                    google.accounts.id.renderButton(document.getElementById('gsi-button-placeholder'), { theme: 'outline', size: 'large' });
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                }
+            }
+            waited += interval;
+            if (waited > maxWaitMs) { clearInterval(t); reject(new Error('GSI not available')); }
+        }, interval);
+    });
+}
+
+function signOut() {
+    currentUser = null; jsonbinRecordCache = null; tasks = normalizeTasks(null);
+    document.getElementById('user-info').classList.add('hidden');
+    document.getElementById('gsi-button-placeholder').classList.remove('hidden');
+    document.getElementById('tab-container').classList.add('hidden');
+    document.getElementById('taskTabs').classList.add('hidden');
+    stopAllTimers();
+}
+
+// -----------------------------
+// UI rendering and behavior
+// -----------------------------
+async function switchTab(tab) {
+    // Save current tab's state before switching
+    if (currentTab) {
+        saveToLocalStorage();
+    }
+    
+    // Switch to new tab
+    currentTab = tab;
+    
+    // Update tab UI
+    document.querySelectorAll('#taskTabs .nav-link').forEach(l => l.classList.remove('active'));
+    const link = [...document.querySelectorAll('#taskTabs .nav-link')].find(a => a.dataset.tab === tab);
+    if (link) link.classList.add('active');
+    
+    // Load and render the new tab's content
+    await loadTasksForCurrentUser();
+    renderTabContent();
+}
+
+function renderTabContent() {
+    const container = document.getElementById('tab-container');
+    container.innerHTML = `
+        <div class="row">
+            <div class="col-md-4">
+                <h2>Now</h2>
+                <div id="now-list" class="task-list"></div>
+                <button class="btn btn-primary mt-2" id="add-now">Add Task</button>
+            </div>
+            <div class="col-md-4">
+                <h2>Future</h2>
+                <div id="future-list" class="task-list"></div>
+                <button class="btn btn-primary mt-2" id="add-future">Add Task</button>
+            </div>
+            <div class="col-md-4">
+                <h2>Completed</h2>
+                <div id="completed-list" class="task-list"></div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h3>Notes</h3>
+                <textarea id="task-notes" class="form-control notes" placeholder="Task notes..."></textarea>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('add-now').addEventListener('click', () => addTask('now'));
+    document.getElementById('add-future').addEventListener('click', () => addTask('future'));
+    renderTasks();
+    setupDragDrop();
 }
 
 function createTaskElement(task, listId) {
-    //console.log(`Creating task element for task:`, task);
     const taskElement = document.createElement('div');
-    taskElement.classList.add('task');
+    taskElement.className = 'task';
     taskElement.draggable = true;
     taskElement.dataset.taskId = task.id;
-    taskElement.innerHTML = `
-        <span contenteditable="true" oninput="updateTaskName(this, '${listId}', '${task.id}')">${task.name}</span>
-        <span class="timer">${formatTime(task.time)}</span>
-        ${listId === 'now' ? `
-            <button class="btn btn-sm btn-primary start-pause-btn" onclick="toggleStartPause(this,'${task.id}')">
-                    <i class="fas fa-play"></i>
-            </button>
-            <button class="btn btn-reset" onclick="resetTimer('${task.id}')">Reset</button>
-        ` : ''}
-        ${listId !== 'completed' ? `
-            <button class="btn btn-delete" onclick="deleteTask('${listId}', '${task.id}')">Delete</button>
-        ` : ''}
-    `;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.contentEditable = true;
+    nameSpan.textContent = task.name || '';
+    nameSpan.addEventListener('input', () => updateTaskName(nameSpan, listId, task.id));
+
+    const timerSpan = document.createElement('span');
+    timerSpan.className = 'timer';
+    timerSpan.textContent = formatTime(task.time || 0);
+
+    taskElement.appendChild(nameSpan);
+    taskElement.appendChild(timerSpan);
+
+    if (listId === 'now') {
+        const startBtn = document.createElement('button'); startBtn.className = 'btn btn-sm btn-primary start-pause-btn'; startBtn.innerHTML = '<i class="fas fa-play"></i>';
+        startBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleStartPause(startBtn, task.id); });
+        const resetBtn = document.createElement('button'); resetBtn.className = 'btn btn-reset'; resetBtn.textContent = 'Reset'; resetBtn.addEventListener('click', (e)=>{ e.stopPropagation(); resetTimer(task.id); });
+        taskElement.appendChild(startBtn); taskElement.appendChild(resetBtn);
+    }
+
+    if (listId !== 'completed') {
+        const delBtn = document.createElement('button'); delBtn.className = 'btn btn-delete'; delBtn.textContent = 'Delete'; delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteTask(listId, task.id); });
+        taskElement.appendChild(delBtn);
+    }
+
     taskElement.addEventListener('click', () => selectTask(task.id, listId));
-    taskElement.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, sourceList: listId }));
-    });
+    taskElement.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, sourceList: listId })); });
     return taskElement;
 }
 
 function renderTasks() {
-    ['now', 'future', 'completed'].forEach(listId => {
-        const listElement = document.getElementById(`${listId}-list`);
-        listElement.innerHTML = '';
-        tasks[listId].forEach(task => {
-            listElement.appendChild(createTaskElement(task, listId));
-        });
+    ['now','future','completed'].forEach(listId => {
+        const el = document.getElementById(`${listId}-list`);
+        if (!el) return;
+        el.innerHTML = '';
+        const list = (tasks[currentTab] && tasks[currentTab][listId]) ? tasks[currentTab][listId] : [];
+        list.forEach(t => el.appendChild(createTaskElement(t, listId)));
     });
 }
 
-function addTaskOLD(listId) {
+function addTask(listId) {
     const taskName = prompt('Enter task name:');
-    if (taskName) {
-        const newTask = { id: Date.now().toString(), name: taskName, time: 0, notes: '' };
-        tasks[listId].push(newTask);
-        saveToLocalStorage();
-        renderTasks();
-    }
+    if (!taskName) return;
+    if (!tasks[currentTab]) tasks[currentTab] = { now: [], future: [], completed: [] };
+    const newTask = { id: Date.now().toString(), name: taskName, time: 0, notes: '' };
+    tasks[currentTab][listId].push(newTask);
+    saveToLocalStorage(); renderTasks();
 }
 
 function updateTaskName(element, listId, taskId) {
-    const task = tasks[listId].find(t => t.id === taskId);
-    if (task) {
-        task.name = element.textContent.replace(/\n/g, '');
-        element.textContent = task.name;
-        saveToLocalStorage();
-    }
+    const list = tasks[currentTab] && tasks[currentTab][listId];
+    if (!list) return;
+    const task = list.find(t=>t.id===taskId);
+    if (task) { task.name = element.textContent.replace(/\n/g,''); saveToLocalStorage(); }
 }
 
 function selectTask(taskId, listId) {
-    document.querySelectorAll('.task').forEach(t => t.classList.remove('selected'));
-    selectedTask = tasks[listId].find(t => t.id === taskId);
-    const taskElement = document.querySelector(`.task[data-task-id="${taskId}"]`);
-    if (taskElement) {
-        taskElement.classList.add('selected');
-    }
-    document.getElementById('task-notes').value = selectedTask ? selectedTask.notes : '';
-}
-
-function startTimer(taskId) {
-    //console.log(`Attempting to start timer for task ${taskId}`);
-    stopAllTimers();
-    //console.log('Current tasks in "now" list:', tasks.now);
-    const task = tasks.now.find(t => t.id === taskId);
-    if (task) {
-        //console.log(`Found task:`, task);
-        timers[taskId] = setInterval(() => {
-            //console.log(`Timer tick for task ${taskId}`);
-            task.time++;
-            updateTimerDisplay(taskId);
-            if (task.time % 1200 === 0) { // 20 minutes
-                playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-1.mp3');
-            }
-            if (task.time % 3600 === 0) { // 1 hour
-                playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
-                playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3');
-            }
-            saveToLocalStorage();
-        }, 1000);
-        //console.log(`Timer started for task ${taskId}`);
-    } else {
-        //console.error(`Task ${taskId} not found in the 'now' list`);
-    }
-}
-
-
-// Add this new wrapper function
-function startTimerWrapper(taskId) {
-    //console.log(`startTimerWrapper called with taskId: ${taskId}`);
-    event.stopPropagation();
-    startTimer(taskId);
-}
-
-function stopTimer(taskId) {
-    clearInterval(timers[taskId]);
-    delete timers[taskId];
-}
-
-function resetTimer(taskId) {
-    stopTimer(taskId);
-    const task = tasks.now.find(t => t.id === taskId);
-    if (task) {
-        task.time = 0;
-        updateTimerDisplay(taskId);
-        saveToLocalStorage();
-    }
-}
-
-function stopAllTimers() {
-    Object.keys(timers).forEach(taskId => {
-        clearInterval(timers[taskId]);
-        delete timers[taskId];
-    });
-}
-
-function updateTimerDisplay(taskId) {
-    const task = tasks.now.find(t => t.id === taskId);
-    if (task) {
-        const timerElement = document.querySelector(`#now-list .task[data-task-id="${taskId}"] .timer`);
-        if (timerElement) {
-            timerElement.textContent = formatTime(task.time);
-        }
-    }
-}
-
-function formatTime(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatDateTime() {
-    const now = new Date();
-    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getFullYear()).slice(-2)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-    return formattedDate;
-}
-
-
-function playSound(url) {
-    new Audio(url).play();
-}
-
-function printTasks() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    let y = 10;
-
-    ['Now', 'Future', 'Completed'].forEach((listName, index) => {
-        doc.setFontSize(16);
-        doc.text(listName, 10, y);
-        y += 10;
-        doc.setFontSize(12);
-        tasks[listName.toLowerCase()].forEach(task => {
-            doc.text(`${task.name} - ${formatTime(task.time)}`, 15, y);
-            y += 5;
-            doc.text(`Notes: ${task.notes}`, 20, y);
-            y += 10;
-        });
-        y += 10;
-    });
-    doc.save(`tasks_${formatDateTime()}.pdf`);
-}
-
-function exportToExcel() {
-    const wb = XLSX.utils.book_new();
-    ['Now', 'Future', 'Completed'].forEach(listName => {
-        const ws_data = tasks[listName.toLowerCase()].map(task => [task.name, formatTime(task.time), task.notes]);
-        const ws = XLSX.utils.aoa_to_sheet([['Task Name', 'Total Time', 'Notes'], ...ws_data]);
-        XLSX.utils.book_append_sheet(wb, ws, listName);
-    });
-    XLSX.writeFile(wb, `tasks_${formatDateTime()}.xlsx`);
-}
-
-function removeCompletedTasks() {
-    if (confirm('Are you sure you want to remove all completed tasks?')) {
-        tasks.completed = [];
-        saveToLocalStorage();
-        renderTasks();
-    }
+    document.querySelectorAll('.task').forEach(t=>t.classList.remove('selected'));
+    const list = tasks[currentTab] && tasks[currentTab][listId];
+    selectedTask = list ? list.find(t=>t.id===taskId) : null;
+    const el = document.querySelector(`.task[data-task-id="${taskId}"]`);
+    if (el) el.classList.add('selected');
+    const notesEl = document.getElementById('task-notes');
+    notesEl.value = selectedTask ? selectedTask.notes || '' : '';
+    notesEl.oninput = (e) => { if (selectedTask) { selectedTask.notes = e.target.value; saveToLocalStorage(); } };
 }
 
 function deleteTask(listId, taskId) {
-    const taskIndex = tasks[listId].findIndex(t => t.id === taskId);
-    if (taskIndex !== -1) {
-        tasks[listId].splice(taskIndex, 1);
-        if (selectedTask && selectedTask.id === taskId) {
-            selectedTask = null;
-            document.getElementById('task-notes').value = '';
-        }
-        saveToLocalStorage();
-        renderTasks();
+    const list = tasks[currentTab] && tasks[currentTab][listId];
+    if (!list) return;
+    const idx = list.findIndex(t=>t.id===taskId);
+    if (idx!==-1) { list.splice(idx,1); if (selectedTask && selectedTask.id===taskId) { selectedTask = null; document.getElementById('task-notes').value=''; } saveToLocalStorage(); renderTasks(); }
+}
+
+function removeCompletedTasks() {
+    if (!confirm('Remove all completed tasks in current tab?')) return;
+    if (tasks[currentTab]) tasks[currentTab].completed = [];
+    saveToLocalStorage(); renderTasks();
+}
+
+// -----------------------------
+// Timers
+// -----------------------------
+function startTimer(taskId) {
+    stopAllTimers();
+    const task = tasks[currentTab] && tasks[currentTab].now.find(t=>t.id===taskId);
+    if (!task) return;
+    timers[taskId] = setInterval(()=>{ task.time = (task.time||0)+1; updateTimerDisplay(taskId); if (task.time%1200===0) playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-1.mp3'); if (task.time%3600===0){ playSound('https://s3.amazonaws.com/freecodecamp/drums/Heater-2.mp3'); } saveToLocalStorage(); }, 1000);
+}
+function stopTimer(taskId){ if (timers[taskId]) { clearInterval(timers[taskId]); delete timers[taskId]; } }
+function resetTimer(taskId){ stopTimer(taskId); const t = tasks[currentTab] && tasks[currentTab].now.find(x=>x.id===taskId); if (t){ t.time=0; updateTimerDisplay(taskId); saveToLocalStorage(); } }
+function stopAllTimers(){ Object.keys(timers).forEach(id=>{ clearInterval(timers[id]); delete timers[id]; }); }
+function updateTimerDisplay(taskId){ const t = tasks[currentTab] && tasks[currentTab].now.find(x=>x.id===taskId); if (t){ const el=document.querySelector(`#now-list .task[data-task-id="${taskId}"] .timer`); if (el) el.textContent = formatTime(t.time||0); } }
+function toggleStartPause(button, taskId){ const icon = button.querySelector('i'); const isPlaying = icon.classList.contains('fa-pause'); if (isPlaying){ icon.classList.replace('fa-pause','fa-play'); button.classList.replace('btn-danger','btn-primary'); stopTimer(taskId); } else { document.querySelectorAll('.start-pause-btn i.fa-pause').forEach(p=>p.classList.replace('fa-pause','fa-play')); document.querySelectorAll('.start-pause-btn').forEach(b=>b.classList.replace('btn-danger','btn-primary')); icon.classList.replace('fa-play','fa-pause'); button.classList.replace('btn-primary','btn-danger'); startTimer(taskId); } }
+function playSound(url){ try{ new Audio(url).play(); }catch(e){console.warn('sound play failed',e);} }
+
+// -----------------------------
+// Drag & drop
+// -----------------------------
+function setupDragDrop(){ ['now','future','completed'].forEach(listId=>{ const el=document.getElementById(`${listId}-list`); if (!el) return; el.addEventListener('dragover', e=>e.preventDefault()); el.addEventListener('drop', e=>{ e.preventDefault(); try{ const {taskId, sourceList} = JSON.parse(e.dataTransfer.getData('text/plain')); const targetList = e.target.closest('.task-list').id.split('-')[0]; const src = tasks[currentTab] && tasks[currentTab][sourceList]; if (!src) return; const idx = src.findIndex(t=>t.id===taskId); if (idx!==-1){ const [task] = src.splice(idx,1); if (targetList==='completed') task.name += ` --Date: ${formatDateTime()}`; tasks[currentTab][targetList].push(task); saveToLocalStorage(); renderTasks(); } }catch(err){ console.error('drop error',err);} }); }); }
+
+// -----------------------------
+// Export to Excel (SheetJS) and Print-to-PDF (jsPDF)
+// Exports all tabs and lists for the current user.
+// -----------------------------
+async function exportToExcel() {
+    try {
+        // Build rows: Tab, List, ID, Name, Time, Notes
+        const rows = [['Tab','List','ID','Name','Time','Notes']];
+        Object.keys(tasks).forEach(tabKey => {
+            ['now','future','completed'].forEach(listId => {
+                const list = (tasks[tabKey] && tasks[tabKey][listId]) ? tasks[tabKey][listId] : [];
+                list.forEach(t => rows.push([tabKey, listId, t.id, t.name || '', formatTime(t.time||0), t.notes || '']));
+            });
+        });
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+        const wbout = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const filename = `tasks_${currentUser ? currentUser.id : 'anon'}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.xlsx`;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error('exportToExcel error', err);
+        alert('Export to Excel failed: ' + err.message);
     }
 }
 
-document.getElementById('task-notes').addEventListener('input', (e) => {
-    if (selectedTask) {
-        selectedTask.notes = e.target.value;
-        saveToLocalStorage();
+async function printTasks() {
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+        const left = 40;
+        let y = 40;
+        const lineHeight = 14;
+        const pageHeight = doc.internal.pageSize.height - 60;
+
+        const header = `Tasks for ${currentUser ? currentUser.name + ' ('+currentUser.email+')' : 'Anonymous'}`;
+        doc.setFontSize(14);
+        doc.text(header, left, y);
+        y += 20;
+        doc.setFontSize(10);
+
+        Object.keys(tasks).forEach(tabKey => {
+            // Print tab header
+            if (y > pageHeight) { doc.addPage(); y = 40; }
+            doc.setFontSize(12);
+            doc.text(`Tab: ${tabKey}`, left, y);
+            y += 16;
+            doc.setFontSize(10);
+
+            ['now','future','completed'].forEach(listId => {
+                const list = (tasks[tabKey] && tasks[tabKey][listId]) ? tasks[tabKey][listId] : [];
+                if (list.length === 0) return;
+                if (y > pageHeight) { doc.addPage(); y = 40; }
+                doc.text(`${listId.toUpperCase()} (${list.length})`, left+8, y);
+                y += 14;
+                list.forEach(t => {
+                    const line = `• ${t.name || '(no name)'} [${formatTime(t.time||0)}]`;
+                    const notes = (t.notes || '').replace(/\s+/g,' ');
+                    const maxWidth = doc.internal.pageSize.width - left - 40;
+                    const split = doc.splitTextToSize(line + (notes?(' — ' + notes):''), maxWidth);
+                    split.forEach(part => {
+                        if (y > pageHeight) { doc.addPage(); y = 40; }
+                        doc.text(part, left+16, y);
+                        y += lineHeight;
+                    });
+                });
+                y += 6;
+            });
+            y += 8;
+        });
+
+        const filename = `tasks_${currentUser ? currentUser.id : 'anon'}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.pdf`;
+        doc.save(filename);
+    } catch (err) {
+        console.error('printTasks error', err);
+        alert('PDF export failed: ' + err.message);
     }
+}
+
+// -----------------------------
+// Wiring UI buttons that live outside tab container
+// -----------------------------
+document.addEventListener('click', (e)=>{
+    const target = e.target;
+    if (target && target.id === 'signOutBtn') signOut();
 });
 
-['now', 'future', 'completed'].forEach(listId => {
-    const listElement = document.getElementById(`${listId}-list`);
-    listElement.addEventListener('dragover', (e) => e.preventDefault());
-    listElement.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const { taskId, sourceList } = JSON.parse(e.dataTransfer.getData('text/plain'));
-        const targetList = e.target.closest('.task-list').id.split('-')[0];
-        
-        if (sourceList === targetList) {
-            // Reordering within the same list
-            const taskElements = Array.from(listElement.querySelectorAll('.task'));
-            const sourceIndex = tasks[sourceList].findIndex(t => t.id === taskId);
-            const targetIndex = taskElements.indexOf(e.target.closest('.task'));
-            
-            if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
-                const [task] = tasks[sourceList].splice(sourceIndex, 1);
-                tasks[sourceList].splice(targetIndex, 0, task);
-            }
-        } else {
-            // Moving between lists
+// Hook buttons
+window.addEventListener('DOMContentLoaded', () => {
+    // Hide main UI until sign-in
+    document.getElementById('tab-container').classList.add('hidden');
+    document.getElementById('taskTabs').classList.add('hidden');
 
-            const taskIndex = tasks[sourceList].findIndex(t => t.id === taskId);
-            if (taskIndex !== -1) {
-                const [task] = tasks[sourceList].splice(taskIndex, 1);
-                 // If the target list is 'completed', add the current date and time
-                if (targetList === 'completed') {
-                    task.name += ` --Date: ${formatDateTime()}`;
-                }
-                
-                tasks[targetList].push(task);
-            }
-        }
-        
-        saveToLocalStorage();
-        renderTasks();
+    // Tab clicks
+    document.querySelectorAll('#taskTabs .nav-link').forEach(link=>{
+        link.addEventListener('click', (e)=>{ e.preventDefault(); switchTab(link.dataset.tab); });
     });
 
+    // External buttons
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.addEventListener('click', exportToExcel);
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) printBtn.addEventListener('click', printTasks);
+    document.getElementById('removeCompletedBtn').addEventListener('click', removeCompletedTasks);
+
+    // Initialize Google Sign-in button when GSI is ready
+    renderGoogleButtonWhenReady().then(()=>{
+        console.info('GSI initialized');
+    }).catch(err=>{
+        console.warn('GSI unavailable:', err);
+        // Show a fallback message or UI
+        const ph = document.getElementById('gsi-button-placeholder');
+        ph.innerHTML = '<button class="btn btn-outline-light">Sign in (GSI unavailable)</button>';
+        ph.querySelector('button').addEventListener('click', ()=>alert('Google Sign-in is unavailable. Check network or origin settings.'));
+    });
 });
 
-renderTasks();
-    </script>
+</script>
 </body>
 </html>
