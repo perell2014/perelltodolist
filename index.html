@@ -93,35 +93,43 @@ let CONFIG = {
 // Load configuration
 async function loadConfig() {
     try {
-        // In production, these will be set by Cloudflare Pages
-        if (typeof GOOGLE_CLIENT_ID !== 'undefined') {
-            CONFIG.GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID;
-            CONFIG.JSONBIN_BIN_ID = JSONBIN_BIN_ID;
-            CONFIG.JSONBIN_MASTER_KEY = JSONBIN_MASTER_KEY;
-        } else {
-            // In local development, load from local config file
+        // First try to load from Cloudflare Function (production)
+        try {
+            const response = await fetch('/api/config');
+            if (response.ok) {
+                const remoteConfig = await response.json();
+                Object.assign(CONFIG, remoteConfig);
+                console.log('Loaded config from Cloudflare Function');
+                return;
+            }
+            throw new Error('Failed to load remote config');
+        } catch (remoteErr) {
+            console.log('Remote config not available, trying local config...', remoteErr);
+        }
+
+        // Fall back to local config (development)
+        try {
             const localConfig = await import('./local.config.js');
             Object.assign(CONFIG, localConfig.default);
+            console.log('Loaded config from local.config.js');
+        } catch (localErr) {
+            console.log('Local config not found, using defaults...');
+            // Final fallback to environment variables if available
+            if (typeof process !== 'undefined' && process.env) {
+                CONFIG.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || CONFIG.GOOGLE_CLIENT_ID;
+                CONFIG.JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || CONFIG.JSONBIN_BIN_ID;
+                CONFIG.JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY || CONFIG.JSONBIN_MASTER_KEY;
+                console.log('Fell back to environment variables');
+            }
         }
-        console.log('Configuration loaded');
     } catch (error) {
-        console.error('Error loading configuration:', error);
-        // Fallback to environment variables if available
-        if (process && process.env) {
-            CONFIG.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-            CONFIG.JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || '';
-            CONFIG.JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY || '';
-        }
+        console.error('Error in loadConfig:', error);
+    } finally {
+        console.log('Configuration loaded:', {
+            ...CONFIG,
+            JSONBIN_MASTER_KEY: CONFIG.JSONBIN_MASTER_KEY ? '***' : 'Not set'
+        });
     }
-    
-    // Initialize the app after config is loaded
-    initializeApp();
-}
-
-// Initialize the application after config is loaded
-function initializeApp() {
-    // Your existing initialization code here
-    console.log('App initialized with config:', CONFIG);
 }
 
 // -----------------------------
