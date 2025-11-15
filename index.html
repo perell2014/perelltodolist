@@ -92,10 +92,48 @@ let CONFIG = {
 
 // Load configuration
 async function loadConfig() {
-   
-             console.log('TRYING to load');
-            fetch("/").then(r => r.text()).then(console.log);
-           
+    try {
+        // First try to fetch config from the server
+        const response = await fetch('/');
+        if (response.ok) {
+            const config = await response.json();
+            Object.assign(CONFIG, config);
+            console.log('Configuration loaded from server');
+        } else {
+            throw new Error('Failed to fetch config from server');
+        }
+    } catch (error) {
+        console.log('Falling back to local config:', error.message);
+        // In production, these will be set by Cloudflare Pages
+        if (typeof GOOGLE_CLIENT_ID !== 'undefined') {
+            CONFIG.GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID;
+            CONFIG.JSONBIN_BIN_ID = JSONBIN_BIN_ID;
+            CONFIG.JSONBIN_MASTER_KEY = JSONBIN_MASTER_KEY;
+        } else {
+            // In local development, load from local config file
+            try {
+                const localConfig = await import('./local.config.js');
+                Object.assign(CONFIG, localConfig.default);
+            } catch (e) {
+                console.error('Error loading local config:', e);
+                // Fallback to environment variables if available
+                if (typeof process !== 'undefined' && process.env) {
+                    CONFIG.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+                    CONFIG.JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || '';
+                    CONFIG.JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY || '';
+                }
+            }
+        }
+    }
+    
+    // Initialize the app after config is loaded
+    initializeApp();
+}
+
+// Initialize the application after config is loaded
+function initializeApp() {
+    // Your existing initialization code here
+    console.log('App initialized with config:', CONFIG);
 }
 
 // -----------------------------
@@ -588,6 +626,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
