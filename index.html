@@ -132,8 +132,20 @@ async function loadConfig() {
 
 // Initialize the application after config is loaded
 function initializeApp() {
+    // Create a masked version of CONFIG for logging
+    const maskedConfig = {};
+    for (const [key, value] of Object.entries(CONFIG)) {
+        // Keep first 2 and last 2 characters of the key, mask the middle
+        const maskedKey = key.length > 4 
+            ? `${key.substring(0, 2)}...${key.substring(key.length - 2)}`
+            : '...';
+        maskedConfig[maskedKey] = '*****';
+    }
+    
+    console.log('App initialized with masked config:', maskedConfig);
+    
     // Your existing initialization code here
-    console.log('App initialized with config:', CONFIG);
+    // The original CONFIG remains unchanged for actual use in the application
 }
 
 // -----------------------------
@@ -626,6 +638,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
