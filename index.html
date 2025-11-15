@@ -93,7 +93,6 @@ let CONFIG = {
 // Load configuration
 async function loadConfig() {
     try {
-        console.log("ENV DIRECTLY: ", env.GOOGLE_CLIENT_ID);
         // First try to fetch config from the server
         const response = await fetch('/api/config');
         if (response.ok) {
@@ -627,6 +626,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
