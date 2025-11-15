@@ -93,8 +93,9 @@ let CONFIG = {
 // Load configuration
 async function loadConfig() {
     try {
+        console.log("ENV DIRECTLY: ", env.GOOGLE_CLIENT_ID);
         // First try to fetch config from the server
-        const response = await fetch('/');
+        const response = await fetch('/api/config');
         if (response.ok) {
             const config = await response.json();
             Object.assign(CONFIG, config);
@@ -125,6 +126,10 @@ async function loadConfig() {
             }
         }
     }
+    
+    // Initialize the app after config is loaded
+    initializeApp();
+}
     
     // Initialize the app after config is loaded
     initializeApp();
@@ -626,6 +631,7 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
