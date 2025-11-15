@@ -20,6 +20,8 @@ export async function onRequest({ request, env }) {
     });
   }
   
-  // Handle other routes
-  return new Response('Not Found', { status: 404 });
+  // For all other routes, let the static file handler serve the files
+  // This allows index.html to be served by the default file handler
+  return env.ASSETS.fetch(request);
 }
+
