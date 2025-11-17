@@ -11,8 +11,8 @@
     <!-- Google Identity Services (loaded async) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- SheetJS and jsPDF for export features -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+     <script src="./scripts/ajax/xlsx/xlsx.full.min.js"></script>
+    <script src="./scripts/ajax/jspdf/jspdf.umd.min.js"></script>
 
     <style>
         body { background-color:#f0f0f0; font-size:14px; display:flex; flex-direction:column; min-height:100vh; margin:0 }
@@ -24,10 +24,35 @@
         .nav-tabs .nav-link[data-tab="pro"].active { background-color: #4a90e2; }
         .nav-tabs .nav-link[data-tab="pers"].active { background-color: #28a745; }
         .nav-tabs .nav-link[data-tab="tmp"].active { background-color: #6c757d; }
-        .main-content { flex-grow:1; padding:20px 0 }
+        .main-content { 
+            flex-grow: 1; 
+            padding: 20px 0; 
+            display: flex;
+            flex-direction: column;
+            height: calc(100% - 150px); /* Adjust based on your header/footer height */
+        }
         .bottom-bar { background:#333; color:#fff; padding:10px 0; font-size:.9rem; text-align:center }
-        .task-list { height:45vh; overflow-y:auto; border:1px solid #ccc; padding:8px; background:#fff; border-radius:8px }
-        .task { cursor:move; padding:6px; margin-bottom:6px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px }
+        .task-list { 
+            height: 45vh; 
+            min-height: 100px;
+            max-height: 80vh;
+            overflow-y: auto; 
+            border: 1px solid #ccc; 
+            padding: 8px; 
+            background: #fff; 
+            border-radius: 8px;
+            resize: vertical;
+            overflow: auto;
+        }
+        .task { 
+            cursor: move; 
+            padding: 6px; 
+            margin-bottom: 6px; 
+            background: #f8f9fa; 
+            border: 1px solid #dee2e6; 
+            border-radius: 4px; 
+            user-select: none;
+        }
         .task.selected { background:#e0f7fa; border-color:#4dd0e1 }
         .notes { min-height:100px }
         .btn { border-radius:15px; padding:3px 10px; margin:1px; font-size:.8rem }
@@ -70,7 +95,7 @@
     <div class="container-fluid" id="tab-container"></div>
 </div>
 
-<div class="bottom-bar">Created by Perell with support from OpenAI / Claude AI / HackTimer by Turuslan - Nov. 2025 - Version:009</div>
+<div class="bottom-bar">Created by Perell with support from OpenAI / Claude AI / HackTimer by Turuslan - Nov. 2025 - Version:010</div>
 
 <script>
 /*
@@ -90,7 +115,6 @@ let CONFIG = {
     JSONBIN_BASE: 'https://api.jsonbin.io/v3/b'
 };
 
-// Load configuration
 async function loadConfig() {
     try {
         // First try to fetch config from the server
@@ -152,14 +176,73 @@ function initializeApp() {
 // App state
 // -----------------------------
 let currentTab = 'pro';
+let loadedTabs = new Set(); // Track which tabs have been loaded
 let tasks = { pro: { now: [], future: [], completed: [] }, pers: { now: [], future: [], completed: [] }, tmp: { now: [], future: [], completed: [] } };
 let selectedTask = null;
 let timers = {};
 let currentUser = null; // { id, email, name }
 let jsonbinRecordCache = null;
+let tasksModified = false; // Track if tasks have been modified
 
 // Start the application by loading configuration
-loadConfig().catch(console.error);
+loadConfig().then(() => {
+    // Set up tab switching with save on change
+    document.getElementById('pro-tab').addEventListener('click', () => switchTab('pro'));
+    document.getElementById('pers-tab').addEventListener('click', () => switchTab('pers'));
+    document.getElementById('tmp-tab').addEventListener('click', () => switchTab('tmp'));
+    
+    // Save on page unload
+    window.addEventListener('beforeunload', (event) => {
+        if (tasksModified && currentUser) {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', `${CONFIG.JSONBIN_BASE}/${CONFIG.JSONBIN_BIN_ID}`, false);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('X-Master-Key', CONFIG.JSONBIN_MASTER_KEY);
+            const record = { ...(jsonbinRecordCache || {}), [currentUser.id]: tasks };
+            xhr.send(JSON.stringify(record));
+        }
+    });
+
+    // Also save when the tab becomes hidden (user switches tabs or minimizes browser)
+    document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'hidden' && tasksModified && currentUser) {
+            try {
+                await saveTasksToJsonBin();
+                tasksModified = false;
+            } catch (err) {
+            console.error('Failed to save on tab switch:', err);
+        }
+    }
+    });
+}).catch(console.error);
+
+// Function to handle tab switching with save
+async function switchTab(tab) {
+    // Save current tab's state before switching
+    if (currentTab && tasksModified && currentUser) {
+        await saveTasksToJsonBin().catch(console.error);
+        tasksModified = false;
+    }
+    
+    // Switch to new tab
+    const previousTab = currentTab;
+    currentTab = tab;
+    
+    // Update tab UI
+    document.querySelectorAll('#taskTabs .nav-link').forEach(l => l.classList.remove('active'));
+    const link = [...document.querySelectorAll('#taskTabs .nav-link')].find(a => a.dataset.tab === tab);
+    if (link) link.classList.add('active');
+    
+    // Only load tasks if this tab hasn't been loaded yet
+    if (!loadedTabs.has(tab) || !tasks[tab]) {
+        await loadTasksForCurrentUser();
+        loadedTabs.add(tab);
+    } else {
+        // Just render the already loaded tasks
+        renderTabContent();
+    }
+    renderTabContent();
+}
 
 // -----------------------------
 // Helpers
@@ -206,17 +289,29 @@ async function fetchJsonBinRecord() {
 
 async function saveJsonBinRecord(record) {
     try {
-        const res = await fetch(`${JSONBIN_BASE}/${JSONBIN_BIN_ID}`, {
+        if (!CONFIG.JSONBIN_BIN_ID || !CONFIG.JSONBIN_MASTER_KEY) {
+            throw new Error('JSONBin configuration is missing. Tasks will only be saved locally.');
+        }
+        const res = await fetch(`${CONFIG.JSONBIN_BASE}/${CONFIG.JSONBIN_BIN_ID}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-Master-Key': CONFIG.JSONBIN_MASTER_KEY },
             body: JSON.stringify(record)
         });
-        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`HTTP ${res.status}: ${errorText || 'Unknown error'}`);
+        }
         const data = await res.json();
         jsonbinRecordCache = record;
         return data;
     } catch (err) {
         console.error('saveJsonBinRecord error', err);
+        // Show user-friendly error message
+        alert(`⚠️ Warning: Could not save to cloud storage. Your changes are only saved locally.
+
+Error details: ${err.message}
+
+Please check your internet connection and try again.`);
         return null;
     }
 }
@@ -235,11 +330,10 @@ async function saveTasksToJsonBin() {
 function saveToLocalStorage() {
     if (currentUser) {
         localStorage.setItem('tasks_' + currentUser.id, JSON.stringify(tasks));
-        // Fire-and-forget remote save
-        saveTasksToJsonBin().catch(e => console.error('remote save failed', e));
     } else {
         localStorage.setItem('tasks', JSON.stringify(tasks));
     }
+    tasksModified = true;
 }
 
 async function loadTasksForCurrentUser() {
@@ -248,6 +342,9 @@ async function loadTasksForCurrentUser() {
     // show UI
     document.getElementById('tab-container').classList.remove('hidden');
     document.getElementById('taskTabs').classList.remove('hidden');
+    
+    // Mark this tab as loaded when we're done
+    const tabToLoad = currentTab;
 
     // load local first
     const local = localStorage.getItem('tasks_' + currentUser.id);
@@ -352,24 +449,6 @@ function signOut() {
 // -----------------------------
 // UI rendering and behavior
 // -----------------------------
-async function switchTab(tab) {
-    // Save current tab's state before switching
-    if (currentTab) {
-        saveToLocalStorage();
-    }
-    
-    // Switch to new tab
-    currentTab = tab;
-    
-    // Update tab UI
-    document.querySelectorAll('#taskTabs .nav-link').forEach(l => l.classList.remove('active'));
-    const link = [...document.querySelectorAll('#taskTabs .nav-link')].find(a => a.dataset.tab === tab);
-    if (link) link.classList.add('active');
-    
-    // Load and render the new tab's content
-    await loadTasksForCurrentUser();
-    renderTabContent();
-}
 
 function renderTabContent() {
     const container = document.getElementById('tab-container');
@@ -638,12 +717,3 @@ window.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
