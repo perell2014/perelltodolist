@@ -186,10 +186,10 @@ let tasksModified = false; // Track if tasks have been modified
 
 // Start the application by loading configuration
 loadConfig().then(() => {
-    // Set up tab switching with save on change
-    document.getElementById('pro-tab').addEventListener('click', () => switchTab('pro'));
-    document.getElementById('pers-tab').addEventListener('click', () => switchTab('pers'));
-    document.getElementById('tmp-tab').addEventListener('click', () => switchTab('tmp'));
+    // Set up tab switching with save on change - using data-tab attributes
+    document.querySelector('[data-tab="pro"]').addEventListener('click', () => switchTab('pro'));
+    document.querySelector('[data-tab="pers"]').addEventListener('click', () => switchTab('pers'));
+    document.querySelector('[data-tab="tmp"]').addEventListener('click', () => switchTab('tmp'));
     
     // Save on page unload
     window.addEventListener('beforeunload', (event) => {
