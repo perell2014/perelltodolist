@@ -1,0 +1,21 @@
+# Environment variables with secrets
+.env
+.env.local
+.env.production
+
+# Local configuration with actual secrets
+local.config.js
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log

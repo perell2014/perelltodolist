@@ -11,7 +11,7 @@
     <!-- Google Identity Services (loaded async) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- SheetJS and jsPDF for export features -->
-     <script src="./scripts/ajax/xlsx/xlsx.full.min.js"></script>
+    <script src="./scripts/ajax/xlsx/xlsx.full.min.js"></script>
     <script src="./scripts/ajax/jspdf/jspdf.umd.min.js"></script>
 
     <style>
@@ -60,6 +60,10 @@
         .btn-reset:hover { background-color: #e68a00; color: white; }
         .btn-delete { background-color: #dc3545; color: white; border: 1px solid #c82333; }
         .btn-delete:hover { background-color: #c82333; color: white; }
+        .btn-backup { background-color: #17a2b8; color: white; border: 1px solid #138496; }
+        .btn-backup:hover { background-color: #138496; color: white; }
+        .btn-restore { background-color: #6f42c1; color: white; border: 1px solid #5a32a3; }
+        .btn-restore:hover { background-color: #5a32a3; color: white; }
         .hidden { display:none }
     </style>
 </head>
@@ -79,6 +83,8 @@
 
                 <button class="btn btn-outline-light me-2" id="printBtn">Print to PDF</button>
                 <button class="btn btn-outline-light me-2" id="exportBtn">Export Excel</button>
+                <button class="btn btn-outline-light me-2" id="backupBtn">Backup</button>
+                <button class="btn btn-outline-light me-2" id="restoreBtn">Restore</button>
                 <button class="btn btn-outline-light" id="removeCompletedBtn">Remove All Completed Tasks</button>
             </div>
         </div>
@@ -136,8 +142,14 @@ async function loadConfig() {
         } else {
             // In local development, load from local config file
             try {
+                console.log('Loading local config file local.config.js');
                 const localConfig = await import('./local.config.js');
                 Object.assign(CONFIG, localConfig.default);
+                if (CONFIG.GOOGLE_CLIENT_ID !== '') {
+                    console.log('GOOGLE_CLIENT_ID is defined from local.config.js: ',CONFIG.GOOGLE_CLIENT_ID.length);
+                } else {
+                    throw new Error('GOOGLE_CLIENT_ID is not defined from local.config.js');
+                }
             } catch (e) {
                 console.error('Error loading local config:', e);
                 // Fallback to environment variables if available
@@ -145,13 +157,20 @@ async function loadConfig() {
                     CONFIG.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
                     CONFIG.JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || '';
                     CONFIG.JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY || '';
-                }
+               }
+               else {
+                console.log('No environment variables found');
+               }
             }
         }
     }
     
-    // Initialize the app after config is loaded
+    if (CONFIG.GOOGLE_CLIENT_ID !== '') {
+// Initialize the app after config is loaded
     initializeApp();
+    } else {
+        console.log('Could not retrievee env variables since GOOGLE_CLIENT_ID is not defined');
+    }
 }
 
 // Initialize the application after config is loaded
@@ -159,6 +178,7 @@ function initializeApp() {
     // Create a masked version of CONFIG for logging
     const maskedConfig = {};
     for (const [key, value] of Object.entries(CONFIG)) {
+        //console.log('Key:', key, 'Value:', value);
         // Keep first 2 and last 2 characters of the key, mask the middle
         const maskedKey = key.length > 4 
             ? `${key.substring(0, 2)}...${key.substring(key.length - 2)}`
@@ -218,6 +238,8 @@ loadConfig().then(() => {
 
 // Function to handle tab switching with save
 async function switchTab(tab) {
+    console.log(`🔄 Switching to tab: ${tab}`);
+    
     // Save current tab's state before switching
     if (currentTab && tasksModified && currentUser) {
         await saveTasksToJsonBin().catch(console.error);
@@ -233,13 +255,45 @@ async function switchTab(tab) {
     const link = [...document.querySelectorAll('#taskTabs .nav-link')].find(a => a.dataset.tab === tab);
     if (link) link.classList.add('active');
     
-    // Only load tasks if this tab hasn't been loaded yet
-    if (!loadedTabs.has(tab) || !tasks[tab]) {
-        await loadTasksForCurrentUser();
+    // Always load tasks if this tab hasn't been loaded yet OR if data appears corrupted
+    const needsReload = !loadedTabs.has(tab) || 
+                        !tasks[tab] || 
+                        !tasks[tab].now || 
+                        !tasks[tab].future || 
+                        !tasks[tab].completed;
+    
+    if (needsReload) {
+        console.log(`📂 Tab ${tab} needs reload (loaded: ${loadedTabs.has(tab)}, data exists: ${!!tasks[tab]})`);
+        await loadTasksForTab(tab);
         loadedTabs.add(tab);
     } else {
-        // Just render the already loaded tasks
-        renderTabContent();
+        console.log(`📂 Tab ${tab} already loaded, checking for remote updates...`);
+        // Always check for remote updates when switching tabs to ensure we have the latest data
+        try {
+            const record = await fetchJsonBinRecord();
+            if (record && record[currentUser.id] && record[currentUser.id][tab]) {
+                const remoteTabData = record[currentUser.id][tab];
+                // Compare with current data to see if there are updates
+                const currentData = JSON.stringify(tasks[tab]);
+                const remoteData = JSON.stringify(remoteTabData);
+                if (currentData !== remoteData) {
+                    console.log(`🔄 Found remote updates for tab ${tab}, refreshing...`);
+                    tasks[tab] = remoteTabData;
+                    // Update local storage with the fresh data
+                    const local = localStorage.getItem('tasks_' + currentUser.id);
+                    const updatedLocal = { ...JSON.parse(local || '{}'), [tab]: tasks[tab] };
+                    localStorage.setItem('tasks_' + currentUser.id, JSON.stringify(updatedLocal));
+                    console.log(`💾 Updated local storage with fresh jsonbin data for tab ${tab}`);
+                } else {
+                    console.log(`📂 Tab ${tab} data is up to date, using cached data`);
+                }
+            } else {
+                console.log(`📂 No remote data found for tab ${tab}, using cached data`);
+            }
+        } catch (e) {
+            console.error('Error checking for remote updates for tab', tab, ':', e);
+            console.log(`📂 Using cached data for tab ${tab} due to remote check failure`);
+        }
     }
     renderTabContent();
 }
@@ -336,6 +390,73 @@ function saveToLocalStorage() {
     tasksModified = true;
 }
 
+async function loadTasksForTab(tab) {
+    if (!currentUser) return;
+    
+    console.log(`🔍 Loading tasks for tab: ${tab}`);
+    
+    // show UI
+    document.getElementById('tab-container').classList.remove('hidden');
+    document.getElementById('taskTabs').classList.remove('hidden');
+    
+    // load local first for this specific tab
+    const local = localStorage.getItem('tasks_' + currentUser.id);
+    let localTabData = null;
+    if (local) {
+        try { 
+            const parsed = JSON.parse(local);
+            if (parsed && parsed[tab]) {
+                localTabData = parsed[tab];
+                console.log(`📱 Found ${Object.keys(localTabData).length} categories in local storage for tab ${tab}`);
+                // Update this tab's data from local storage
+                if (!tasks[tab]) tasks[tab] = { now: [], future: [], completed: [] };
+                tasks[tab] = localTabData;
+            } else {
+                console.log(`📱 No local data found for tab ${tab}`);
+            }
+        } catch(e) { 
+            console.warn('local parse error for tab', tab, e); 
+        }
+    } else {
+        console.log(`📱 No local storage data found for user ${currentUser.id}`);
+    }
+
+    try {
+        // fetch remote authoritative copy
+        console.log(`☁️ Fetching data from jsonbin for tab ${tab}`);
+        const record = await fetchJsonBinRecord();
+        if (record && record[currentUser.id] && record[currentUser.id][tab]) {
+            // Update this tab's data from jsonbin
+            tasks[tab] = record[currentUser.id][tab];
+            console.log(`☁️ Found ${Object.keys(tasks[tab]).length} categories in jsonbin for tab ${tab}`);
+            // Update local storage with the fresh data
+            const updatedLocal = { ...JSON.parse(local || '{}'), [tab]: tasks[tab] };
+            localStorage.setItem('tasks_' + currentUser.id, JSON.stringify(updatedLocal));
+            console.log(`💾 Updated local storage with jsonbin data for tab ${tab}`);
+        } else {
+            console.log(`☁️ No jsonbin data found for tab ${tab}`);
+            if (!localTabData) {
+                // No data from jsonbin and no local data, ensure normalized structure
+                console.log(`🆕 Creating empty structure for tab ${tab}`);
+                if (!tasks[tab]) tasks[tab] = { now: [], future: [], completed: [] };
+                // Save the empty structure to jsonbin
+                await saveTasksToJsonBin();
+            } else {
+                console.log(`📱 Keeping local data for tab ${tab} (no remote data)`);
+            }
+        }
+    } catch (e) {
+        console.error('Error loading remote tasks for tab', tab, ':', e);
+        // If remote fails, we already have local data loaded above, so keep that
+    }
+    
+    console.log(`✅ Finished loading tab ${tab}:`, {
+        now: tasks[tab]?.now?.length || 0,
+        future: tasks[tab]?.future?.length || 0,
+        completed: tasks[tab]?.completed?.length || 0
+    });
+}
+
 async function loadTasksForCurrentUser() {
     if (!currentUser) return;
     
@@ -404,10 +525,15 @@ window.handleCredentialResponse = async function(response) {
     try {
         const payload = parseJwt(response.credential);
         currentUser = { id: payload.sub, email: payload.email, name: payload.name };
+        console.log(`👤 User logged in: ${currentUser.name} (${currentUser.email})`);
         document.getElementById('user-name').textContent = `${currentUser.name} (${currentUser.email})`;
         document.getElementById('user-info').classList.remove('hidden');
         document.getElementById('gsi-button-placeholder').classList.add('hidden');
-        await loadTasksForCurrentUser();
+        
+        // Load the initial tab data using the new tab-specific function
+        console.log(`🚀 Loading initial tab: ${currentTab}`);
+        await loadTasksForTab(currentTab);
+        loadedTabs.add(currentTab);
         renderTabContent();
     } catch (err) {
         console.error('handleCredentialResponse error', err);
@@ -590,6 +716,116 @@ function playSound(url){ try{ new Audio(url).play(); }catch(e){console.warn('sou
 function setupDragDrop(){ ['now','future','completed'].forEach(listId=>{ const el=document.getElementById(`${listId}-list`); if (!el) return; el.addEventListener('dragover', e=>e.preventDefault()); el.addEventListener('drop', e=>{ e.preventDefault(); try{ const {taskId, sourceList} = JSON.parse(e.dataTransfer.getData('text/plain')); const targetList = e.target.closest('.task-list').id.split('-')[0]; const src = tasks[currentTab] && tasks[currentTab][sourceList]; if (!src) return; const idx = src.findIndex(t=>t.id===taskId); if (idx!==-1){ const [task] = src.splice(idx,1); if (targetList==='completed') task.name += ` --Date: ${formatDateTime()}`; tasks[currentTab][targetList].push(task); saveToLocalStorage(); renderTasks(); } }catch(err){ console.error('drop error',err);} }); }); }
 
 // -----------------------------
+// Backup and Restore functionality
+// -----------------------------
+async function backupData() {
+    try {
+        // Ensure all tabs are loaded before backup
+        if (currentUser) {
+            console.log('Loading all tabs for backup...');
+            for (const tab of ['pro', 'pers', 'tmp']) {
+                if (!loadedTabs.has(tab)) {
+                    await loadTasksForTab(tab);
+                    loadedTabs.add(tab);
+                }
+            }
+            // Switch back to current tab
+            await switchTab(currentTab);
+        }
+        
+        // Create backup object with all user data
+        const backupData = {
+            version: '1.0',
+            timestamp: new Date().toISOString(),
+            user: currentUser ? {
+                id: currentUser.id,
+                email: currentUser.email,
+                name: currentUser.name
+            } : null,
+            tasks: tasks,
+            currentTab: currentTab
+        };
+        
+        // Convert to JSON and create blob
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const filename = `todolist_backup_${currentUser ? currentUser.id : 'anon'}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        
+        console.log('Backup created successfully');
+    } catch (err) {
+        console.error('Backup failed:', err);
+        alert('Backup failed: ' + err.message);
+    }
+}
+
+async function restoreData() {
+    try {
+        // Create file input element
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        
+        input.onchange = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                const text = await file.text();
+                const backupData = JSON.parse(text);
+                
+                // Validate backup structure
+                if (!backupData.tasks || typeof backupData.tasks !== 'object') {
+                    throw new Error('Invalid backup file structure');
+                }
+                
+                // Confirm restore
+                const confirmMessage = `This will completely replace all your current tasks with the backup from ${new Date(backupData.timestamp).toLocaleString()}.\n\nAre you sure you want to continue?`;
+                if (!confirm(confirmMessage)) return;
+                
+                // Restore data
+                tasks = normalizeTasks(backupData.tasks);
+                if (backupData.currentTab && ['pro', 'pers', 'tmp'].includes(backupData.currentTab)) {
+                    currentTab = backupData.currentTab;
+                }
+                
+                // Update UI
+                loadedTabs.clear(); // Force reload of all tabs
+                renderTabContent(); // Immediately render the restored content
+                renderTasks(); // Render the tasks for current tab
+                
+                // Save to storage
+                saveToLocalStorage();
+                if (currentUser) {
+                    await saveTasksToJsonBin();
+                }
+                
+                console.log('Data restored successfully');
+                alert('Data restored successfully!');
+            } catch (parseErr) {
+                console.error('Restore failed:', parseErr);
+                alert('Restore failed: ' + parseErr.message);
+            }
+        };
+        
+        // Trigger file selection
+        input.click();
+    } catch (err) {
+        console.error('Restore failed:', err);
+        alert('Restore failed: ' + err.message);
+    }
+}
+
+// -----------------------------
 // Export to Excel (SheetJS) and Print-to-PDF (jsPDF)
 // Exports all tabs and lists for the current user.
 // -----------------------------
@@ -700,6 +936,10 @@ window.addEventListener('DOMContentLoaded', () => {
     if (exportBtn) exportBtn.addEventListener('click', exportToExcel);
     const printBtn = document.getElementById('printBtn');
     if (printBtn) printBtn.addEventListener('click', printTasks);
+    const backupBtn = document.getElementById('backupBtn');
+    if (backupBtn) backupBtn.addEventListener('click', backupData);
+    const restoreBtn = document.getElementById('restoreBtn');
+    if (restoreBtn) restoreBtn.addEventListener('click', restoreData);
     document.getElementById('removeCompletedBtn').addEventListener('click', removeCompletedTasks);
 
     // Initialize Google Sign-in button when GSI is ready
