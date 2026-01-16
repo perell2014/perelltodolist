@@ -463,37 +463,28 @@ async function loadTasksForCurrentUser() {
     // show UI
     document.getElementById('tab-container').classList.remove('hidden');
     document.getElementById('taskTabs').classList.remove('hidden');
-    
-    // Mark this tab as loaded when we're done
-    const tabToLoad = currentTab;
 
-    // load local first
+    // load local first - load ALL tabs data
     const local = localStorage.getItem('tasks_' + currentUser.id);
     if (local) {
         try { 
             const parsed = JSON.parse(local);
-            // Only update the current tab's data to preserve other tabs' state
-            if (parsed && parsed[currentTab]) {
-                tasks[currentTab] = parsed[currentTab];
-            } else {
-                tasks = normalizeTasks(parsed);
-            }
+            // Load complete tasks structure for all tabs
+            tasks = normalizeTasks(parsed);
+            console.log('📱 Loaded all tabs from local storage');
         } catch(e) { 
             console.warn('local parse error', e); 
         }
     }
 
     try {
-        // fetch remote authoritative copy
+        // fetch remote authoritative copy - load ALL tabs data
         const record = await fetchJsonBinRecord();
         if (record && record[currentUser.id]) {
-            // Only update the current tab's data to preserve other tabs' state
-            if (record[currentUser.id][currentTab]) {
-                tasks[currentTab] = record[currentUser.id][currentTab];
-            } else {
-                tasks = normalizeTasks(record[currentUser.id]);
-            }
+            // Load complete tasks structure for all tabs from remote
+            tasks = normalizeTasks(record[currentUser.id]);
             localStorage.setItem('tasks_' + currentUser.id, JSON.stringify(tasks));
+            console.log('☁️ Loaded all tabs from jsonbin');
         } else {
             // ensure normalized and save initial
             tasks = normalizeTasks(tasks);
@@ -502,6 +493,12 @@ async function loadTasksForCurrentUser() {
     } catch (e) {
         console.error('Error loading remote tasks:', e);
     }
+    
+    // Mark all tabs as loaded since we have the data
+    loadedTabs.clear();
+    loadedTabs.add('pro');
+    loadedTabs.add('pers');
+    loadedTabs.add('tmp');
     
     renderTabContent();
 }
@@ -530,10 +527,9 @@ window.handleCredentialResponse = async function(response) {
         document.getElementById('user-info').classList.remove('hidden');
         document.getElementById('gsi-button-placeholder').classList.add('hidden');
         
-        // Load the initial tab data using the new tab-specific function
-        console.log(`🚀 Loading initial tab: ${currentTab}`);
-        await loadTasksForTab(currentTab);
-        loadedTabs.add(currentTab);
+        // Load all tabs data using the improved function
+        console.log(`🚀 Loading all tabs data for user: ${currentUser.name}`);
+        await loadTasksForCurrentUser();
         renderTabContent();
     } catch (err) {
         console.error('handleCredentialResponse error', err);
@@ -800,8 +796,7 @@ async function restoreData() {
                 
                 // Update UI
                 loadedTabs.clear(); // Force reload of all tabs
-                renderTabContent(); // Immediately render the restored content
-                renderTasks(); // Render the tasks for current tab
+                await switchTab(currentTab);
                 
                 // Save to storage
                 saveToLocalStorage();
